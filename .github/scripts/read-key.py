@@ -19,7 +19,27 @@ BEGIN = "-----BEGIN PGP PRIVATE KEY BLOCK-----"
 END = "-----END PGP PRIVATE KEY BLOCK-----"
 
 
+# Dashes and spaces that phones and "smart punctuation" put in place of the
+# armour's "-----" and plain spaces.
+DASHES = re.compile("[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]")
+SPACES = re.compile("[\u00a0\u2000-\u200b\u202f\u205f\u3000\ufeff]")
+ARMOUR = re.compile(r"-+\s*(BEGIN|END) PGP PRIVATE KEY BLOCK\s*-+")
+
+SECRET = ""
+
+
+def describe(secret):
+    """What the secret looks like, without any of its contents."""
+    odd = sorted({f"U+{ord(c):04X}" for c in secret if ord(c) > 126 or (ord(c) < 32 and c not in "\r\n\t")})
+    return (f"it is {len(secret)} characters on {secret.count(chr(10)) + 1} lines"
+            f"{', has a BEGIN' if 'BEGIN' in secret else ', no BEGIN'}"
+            f"{', has an END' if 'END' in secret else ', no END'}"
+            f"{', unusual characters ' + ' '.join(odd[:8]) if odd else ''}")
+
+
 def fail(message):
+    if SECRET:
+        message += f" ({describe(SECRET)}; REPO_GPG_PRIVATE_KEY.txt is about 3,400 characters on 56 lines)"
     print(f"::error::{message}", file=sys.stderr)
     sys.exit(1)
 
@@ -47,7 +67,11 @@ def rewrap(text):
 
 
 def main():
-    secret = os.environ.get(sys.argv[1], "").strip().strip("\"'").strip()
+    global SECRET
+    SECRET = os.environ.get(sys.argv[1], "")
+    secret = SPACES.sub(" ", DASHES.sub("-", SECRET)).strip().strip("\"'\u201c\u201d\u2018\u2019").strip()
+    # Put the armour lines back to five dashes each, whatever the paste made of them.
+    secret = ARMOUR.sub(lambda m: f"-----{m.group(1)} PGP PRIVATE KEY BLOCK-----", secret)
     if not secret:
         fail(f"Set the {sys.argv[1]} secret (Settings › Secrets and variables › Actions).")
     if BEGIN not in secret:
