@@ -1,0 +1,26 @@
+SpacePenguin is a small, fast web browser that stays out of your way. It is free and open source, with no account, no ads of its own and no tracking.
+
+TABS THAT STAY ORGANISED
+• Tabs and tab groups: touch and hold a tab to group it, then name and colour the group.
+• A new-tab page with your most visited sites, bookmarks and latest pages.
+• Tabs and groups come back when you open the app again.
+• Bookmarks and history.
+
+BUILT FOR ONE HAND
+• The toolbar sits at the bottom, within thumb reach.
+• Light and dark.
+
+FEWER ADS, LESS WAITING
+• Ads are hidden with the EasyList filter rules.
+• YouTube ads that start are muted and skipped.
+• Sponsor segments in YouTube videos are skipped, using SponsorBlock's community list.
+
+YOUR CHOICE OF SEARCH
+• DuckDuckGo by default; Google, Bing, Startpage, Brave Search, Ecosia and more are a tap away.
+
+A NOTE ON PRIVACY
+SpacePenguin collects nothing about you. Your history, bookmarks and tabs stay on your iPhone. To skip sponsor segments, it looks up the videos you watch in SponsorBlock's public list. "New tab without history" keeps a tab out of your history, but it shares cookies with your other tabs, so it is not a private mode; Settings › Clear history and cookies forgets everything.
+
+Pages are shown with iOS's own web engine, as every iPhone browser does. That engine does not let apps block requests, so ads are hidden and skipped rather than never downloaded.
+
+SpacePenguin is also on Windows, macOS, Linux, Chromebooks and Android: https://developer1-vd.github.io/SpacePenguin/

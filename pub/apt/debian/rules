@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+# SpacePenguin against the distribution's Qt, as its build-linux-packages.sh
+# builds it, with the AppArmor profile that lets Chromium's sandbox work on
+# Ubuntu 23.10 and later.
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@ --buildsystem=cmake+ninja
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DSPACEPENGUIN_USE_LOCAL_QT=OFF \
+		-DSPACEPENGUIN_INSTALL_QT_CONF=OFF \
+		-DSPACEPENGUIN_INSTALL_APPARMOR_PROFILE=ON \
+		-DSPACEPENGUIN_BUILD_TESTS=OFF
+
+# The tests are not built into the package (they run in SpacePenguin's own CI).
+override_dh_auto_test:
