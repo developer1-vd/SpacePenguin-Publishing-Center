@@ -23,13 +23,16 @@ VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["vers
 if [[ -n "${REPO_GPG_PRIVATE_KEY:-}" ]]; then
     GNUPGHOME="$(mktemp -d)"
     export GNUPGHOME
-    printf '%s\n' "${REPO_GPG_PRIVATE_KEY}" | gpg --batch --quiet --import
+    python3 "${ROOT}/.github/scripts/read-key.py" REPO_GPG_PRIVATE_KEY >"${GNUPGHOME}/key.asc"
+    gpg --batch --quiet --import "${GNUPGHOME}/key.asc" ||
+        { echo "::error::gpg could not read REPO_GPG_PRIVATE_KEY: paste the whole of REPO_GPG_PRIVATE_KEY.txt again." >&2; exit 1; }
+    rm -f "${GNUPGHOME}/key.asc"
 fi
 KEY="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')"
 [[ -n "${KEY}" ]] || { echo "No signing key: set REPO_GPG_PRIVATE_KEY" >&2; exit 1; }
 # The key in this repository is the one people trust; refuse any other.
 PUBLISHED="$(gpg --with-colons --import-options show-only --import "${ROOT}/pub/apt/spacepenguin-archive-keyring.asc" | awk -F: '/^fpr/ {print $10; exit}')"
-[[ "${KEY}" == "${PUBLISHED}" ]] || { echo "The signing key ${KEY} is not the published ${PUBLISHED}" >&2; exit 1; }
+[[ "${KEY}" == "${PUBLISHED}" ]] || { echo "::error::REPO_GPG_PRIVATE_KEY is the key ${KEY}, not the repositories' key ${PUBLISHED} (is it the Flatpak key?): paste REPO_GPG_PRIVATE_KEY.txt." >&2; exit 1; }
 
 rm -rf "${SITE}"
 mkdir -p "${SITE}"
