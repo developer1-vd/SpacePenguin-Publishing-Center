@@ -1,0 +1,181 @@
+# Publishes a SpacePenguin release everywhere this repository serves it. Start it
+# from the Actions tab (Run workflow) with the version, e.g. 1.0.0-rc.7, once
+# SpacePenguin's release is out:
+#
+#   1. Downloads the release's files and checks each against GitHub's SHA-256.
+#   2. Copies them into a release of this repository (v<version>), and writes
+#      pub/win, pub/macos and pub/android's README.md with their links.
+#   3. Builds the Fedora .rpm from pub/dnf/spacepenguin.spec, as COPR does.
+#   4. Builds the signed apt and dnf repositories and publishes them with GitHub
+#      Pages (Settings › Pages › Source: GitHub Actions).
+#   5. Uploads the Ubuntu source package to the PPA, when the Launchpad secrets
+#      are set (pub/apt/README.md).
+#
+# Secrets: REPO_GPG_PRIVATE_KEY (the repositories' signing key); for the PPA,
+# LAUNCHPAD_GPG_PRIVATE_KEY and the variable LAUNCHPAD_PPA (e.g.
+# ppa:developer1-vd/spacepenguin).
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SpacePenguin version to publish, such as 1.0.0-rc.7 or 1.0.0'
+        required: true
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  fetch:
+    name: Download and check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the release's files and check their checksums
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/fetch-release.py "${VERSION#v}" release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+          retention-days: 7
+
+  binaries:
+    name: Release and listings
+    needs: fetch
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - name: Copy the files into this repository's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${VERSION#v}"
+          tag="v${version}"
+          prerelease=$(python3 -c 'import json; print(json.load(open("release/manifest.json"))["prerelease"])')
+          flags=()
+          [ "${prerelease}" = True ] && flags+=(--prerelease)
+          files=$(find release -maxdepth 1 -type f ! -name manifest.json | sort)
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" ${files} --clobber
+          else
+            gh release create "${tag}" ${files} "${flags[@]}" --title "SpacePenguin ${version}" \
+              --notes "SpacePenguin ${version}, copied from https://github.com/developer1-vd/SpacePenguin/releases/tag/${tag} and checked against its SHA-256 sums."
+          fi
+      - name: Write pub/win, pub/macos and pub/android
+        run: |
+          python3 .github/scripts/write-listings.py release .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pub/win/README.md pub/macos/README.md pub/android/README.md
+          if git diff --cached --quiet; then
+            echo "The listings are already up to date."
+          else
+            git commit -m "Listings for SpacePenguin ${VERSION#v}"
+            git push
+          fi
+
+  rpm:
+    name: Fedora .rpm
+    needs: fetch
+    runs-on: ubuntu-24.04
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build from pub/dnf/spacepenguin.spec, as COPR does
+        run: |
+          dnf -y -q install rpm-build rpmdevtools 'dnf-command(builddep)'
+          version="${VERSION#v}"
+          dnf -y -q builddep --define "upstream_version ${version}" pub/dnf/spacepenguin.spec
+          spectool -g -R --define "upstream_version ${version}" pub/dnf/spacepenguin.spec
+          rpmbuild -ba --define "upstream_version ${version}" pub/dnf/spacepenguin.spec
+          mkdir -p rpms
+          cp ~/rpmbuild/RPMS/*/*.rpm ~/rpmbuild/SRPMS/*.rpm rpms/
+      - name: Install it and start SpacePenguin
+        run: |
+          dnf -y -q install $(ls rpms/spacepenguin-*.rpm | grep -v -e debug -e '\.src\.rpm')
+          QT_QPA_PLATFORM=offscreen HOME="$(mktemp -d)" SpacePenguin --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fedora-rpm
+          path: rpms/
+          retention-days: 7
+
+  repositories:
+    name: apt and dnf repositories
+    needs: [fetch, rpm]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: fedora-rpm
+          path: rpms
+      - name: Build and sign them
+        env:
+          REPO_GPG_PRIVATE_KEY: ${{ secrets.REPO_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "${REPO_GPG_PRIVATE_KEY}" ]; then
+            echo "::error::Set the REPO_GPG_PRIVATE_KEY secret (Settings › Secrets and variables › Actions)."
+            exit 1
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends apt-utils createrepo-c rpm gnupg
+          bash .github/scripts/build-repos.sh release site rpms
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  ppa:
+    name: PPA upload
+    needs: fetch
+    if: vars.LAUNCHPAD_PPA != ''
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the source package and upload it
+        env:
+          LAUNCHPAD_GPG_PRIVATE_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
+          LAUNCHPAD_PPA: ${{ vars.LAUNCHPAD_PPA }}
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends devscripts debhelper dput curl ca-certificates gnupg
+          export GNUPGHOME="$(mktemp -d)"
+          printf '%s\n' "${LAUNCHPAD_GPG_PRIVATE_KEY}" | gpg --batch --import
+          export DEBSIGN_KEYID="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')"
+          export DEBFULLNAME="$(gpg --list-secret-keys --with-colons | awk -F: '/^uid/ {print $10; exit}' | sed 's/ <.*//')"
+          export DEBEMAIL="$(gpg --list-secret-keys --with-colons | awk -F: '/^uid/ {print $10; exit}' | sed -n 's/.*<\(.*\)>.*/\1/p')"
+          pub/apt/make-source.sh "${VERSION#v}"
+          dput "${LAUNCHPAD_PPA}" pub/apt/out/*_source.changes
