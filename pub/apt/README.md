@@ -26,7 +26,7 @@ Launchpad builds SpacePenguin on its own servers from the source package that
 `make-source.sh` makes from this folder's `debian/`. Once it is set up:
 
 ```sh
-sudo add-apt-repository ppa:<your Launchpad name>/spacepenguin
+sudo add-apt-repository ppa:developer1xd/spacepenguin
 sudo apt install spacepenguin
 ```
 
@@ -43,7 +43,7 @@ Ubuntu 26.04 is the first with the Qt 6.8 SpacePenguin needs, so the PPA builds 
 4. In this repository's *Settings › Secrets and variables › Actions*:
    - secret `LAUNCHPAD_GPG_PRIVATE_KEY`: that key's private half
      (`gpg --armor --export-secret-keys <key ID>`), without a passphrase;
-   - variable `LAUNCHPAD_PPA`: `ppa:<your Launchpad name>/spacepenguin`.
+   - variable `LAUNCHPAD_PPA`: `ppa:developer1xd/spacepenguin`.
 
 From then on, the *publish* workflow uploads each version to the PPA. Launchpad
 emails you when it has built (about an hour).
@@ -53,7 +53,7 @@ emails you when it has built (about an hour).
 ```sh
 sudo apt install devscripts debhelper dput
 DEBSIGN_KEYID=<your key ID> pub/apt/make-source.sh 1.0.0-rc.7
-dput ppa:<your Launchpad name>/spacepenguin pub/apt/out/*_source.changes
+dput ppa:developer1xd/spacepenguin pub/apt/out/*_source.changes
 ```
 
 A second upload of the same version needs a higher revision:

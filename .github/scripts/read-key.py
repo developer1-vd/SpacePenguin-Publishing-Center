@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Turns the REPO_GPG_PRIVATE_KEY secret into an armoured private key for gpg.
+"""Turns a private-key secret into an armoured private key for gpg.
+
+    read-key.py <environment variable> [what to paste, for the errors]
 
 Reads the secret from the environment variable named by the first argument and
 prints the key on stdout. Pastes into GitHub's secret box get mangled in a few
@@ -26,6 +28,8 @@ SPACES = re.compile("[\u00a0\u2000-\u200b\u202f\u205f\u3000\ufeff]")
 ARMOUR = re.compile(r"-+\s*(BEGIN|END) PGP PRIVATE KEY BLOCK\s*-+")
 
 SECRET = ""
+NAME = sys.argv[1]
+SOURCE = sys.argv[2] if len(sys.argv) > 2 else f"{NAME}.txt"
 
 
 def describe(secret):
@@ -39,7 +43,8 @@ def describe(secret):
 
 def fail(message):
     if SECRET:
-        message += f" ({describe(SECRET)}; REPO_GPG_PRIVATE_KEY.txt is about 3,400 characters on 56 lines)"
+        hint = "; REPO_GPG_PRIVATE_KEY.txt is about 3,400 characters on 56 lines" if NAME == "REPO_GPG_PRIVATE_KEY" else ""
+        message += f" ({describe(SECRET)}{hint})"
     print(f"::error::{message}", file=sys.stderr)
     sys.exit(1)
 
@@ -55,12 +60,12 @@ def rewrap(text):
     if match and len(data) % 4 == 1:  # "=XXXX" after the base64 is the checksum
         checksum, data = "=" + match.group(1), data[: match.start()]
     if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", data):
-        fail("REPO_GPG_PRIVATE_KEY has characters a key cannot hold between its BEGIN "
-             "and END lines: paste REPO_GPG_PRIVATE_KEY.txt again, unchanged.")
+        fail(f"{NAME} has characters a key cannot hold between its BEGIN "
+             f"and END lines: paste {SOURCE} again, unchanged.")
     try:
         base64.b64decode(data, validate=True)
     except binascii.Error:
-        fail("REPO_GPG_PRIVATE_KEY is cut short: paste the whole of REPO_GPG_PRIVATE_KEY.txt, "
+        fail(f"{NAME} is cut short: paste the whole of {SOURCE}, "
              "BEGIN and END lines included.")
     wrapped = "\n".join(data[i:i + 64] for i in range(0, len(data), 64))
     return f"{BEGIN}\n\n{wrapped}\n{checksum + chr(10) if checksum else ''}{END}\n"
@@ -73,7 +78,7 @@ def main():
     # Put the armour lines back to five dashes each, whatever the paste made of them.
     secret = ARMOUR.sub(lambda m: f"-----{m.group(1)} PGP PRIVATE KEY BLOCK-----", secret)
     if not secret:
-        fail(f"Set the {sys.argv[1]} secret (Settings › Secrets and variables › Actions).")
+        fail(f"Set the {NAME} secret (Settings › Secrets and variables › Actions).")
     if BEGIN not in secret:
         try:
             decoded = base64.b64decode(re.sub(r"\s+", "", secret), validate=True).decode()
@@ -82,18 +87,18 @@ def main():
         if BEGIN in decoded:
             secret = decoded  # saved base64-encoded; that works too
         elif "BEGIN PGP PUBLIC KEY BLOCK" in secret:
-            fail(f"{sys.argv[1]} holds the public key; it needs the private key (REPO_GPG_PRIVATE_KEY.txt).")
+            fail(f"{NAME} holds the public key; it needs the private key ({SOURCE}).")
         elif "BEGIN PGP SIGNATURE" in secret or "revocation" in secret.lower():
-            fail(f"{sys.argv[1]} holds a signature or revocation certificate; it needs the private key "
-                 "(REPO_GPG_PRIVATE_KEY.txt).")
+            fail(f"{NAME} holds a signature or revocation certificate; it needs the private key "
+                 f"({SOURCE}).")
         else:
-            fail(f"{sys.argv[1]} is not a private key (no BEGIN PGP PRIVATE KEY BLOCK line): paste the "
-                 "whole of REPO_GPG_PRIVATE_KEY.txt, BEGIN and END lines included.")
+            fail(f"{NAME} is not a private key (no BEGIN PGP PRIVATE KEY BLOCK line): paste the "
+                 f"whole of {SOURCE}, BEGIN and END lines included.")
     if END not in secret:
-        fail(f"{sys.argv[1]} is cut short (no END PGP PRIVATE KEY BLOCK line): paste the whole of "
-             "REPO_GPG_PRIVATE_KEY.txt.")
+        fail(f"{NAME} is cut short (no END PGP PRIVATE KEY BLOCK line): paste the whole of "
+             f"{SOURCE}.")
     if secret.count(BEGIN) > 1:
-        fail(f"{sys.argv[1]} holds more than one key: paste only REPO_GPG_PRIVATE_KEY.txt.")
+        fail(f"{NAME} holds more than one key: paste only {SOURCE}.")
     sys.stdout.write(rewrap(secret))
 
 

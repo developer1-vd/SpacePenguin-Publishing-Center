@@ -173,7 +173,12 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends devscripts debhelper dput curl ca-certificates gnupg
           export GNUPGHOME="$(mktemp -d)"
-          printf '%s\n' "${LAUNCHPAD_GPG_PRIVATE_KEY}" | gpg --batch --import
+          # Forgiving of pastes that lost line breaks or gained long dashes (read-key.py).
+          apt-get install -y -qq --no-install-recommends python3 >/dev/null
+          python3 .github/scripts/read-key.py LAUNCHPAD_GPG_PRIVATE_KEY \
+              "the output of gpg --armor --export-secret-keys <your key>" >"${GNUPGHOME}/key.asc"
+          gpg --batch --import "${GNUPGHOME}/key.asc"
+          rm -f "${GNUPGHOME}/key.asc"
           export DEBSIGN_KEYID="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')"
           export DEBFULLNAME="$(gpg --list-secret-keys --with-colons | awk -F: '/^uid/ {print $10; exit}' | sed 's/ <.*//')"
           export DEBEMAIL="$(gpg --list-secret-keys --with-colons | awk -F: '/^uid/ {print $10; exit}' | sed -n 's/.*<\(.*\)>.*/\1/p')"

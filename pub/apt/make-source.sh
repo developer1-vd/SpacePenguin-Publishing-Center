@@ -52,4 +52,4 @@ fi
 cd "${OUT}"
 ls -l "${OUT}"
 echo
-echo "Upload with: dput ppa:<your Launchpad name>/spacepenguin ${OUT}/spacepenguin_${PACKAGE_VERSION}_source.changes"
+echo "Upload with: dput ppa:developer1xd/spacepenguin ${OUT}/spacepenguin_${PACKAGE_VERSION}_source.changes"

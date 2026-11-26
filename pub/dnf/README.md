@@ -20,12 +20,15 @@ SpacePenguin's release may be openSUSE's, which needs a newer Qt than Fedora has
 
 ## COPR
 
+Live at <https://copr.fedorainfracloud.org/coprs/developer1/SpacePenguin/>, for
+Fedora 44, 45 and rawhide on x86_64 and aarch64.
+
 [COPR](https://copr.fedorainfracloud.org) is Fedora's build service: it builds the
 package from `spacepenguin.spec` for every Fedora release you choose, on its own
 servers. Once it is set up:
 
 ```sh
-sudo dnf copr enable <your FAS name>/spacepenguin
+sudo dnf copr enable developer1/SpacePenguin
 sudo dnf install spacepenguin
 ```
 
